@@ -1,10 +1,13 @@
-// Launches the $WHACK coin on pump.fun with no initial buy. Standard library only (Node 22+).
-// Usage: node tools/launch.mjs <keypair.json> [--send]   (without --send it only simulates and prints the cost)
+// Launches a coin on pump.fun with no initial buy. Standard library only (Node 22+).
+// Usage: node tools/launch.mjs <keypair.json> --coin coins/<name>.json [--budget-lamports N] [--send]
+// Without --send it only simulates and prints the cost. The coin file names the coin, its description lines,
+// its logo and the public metadata file this repository serves for it.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
 
+const arg = (name, dflt) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : dflt; };
 const RPC = 'https://api.mainnet-beta.solana.com';
-const BUDGET_LAMPORTS = 30_000_000; // 0.03 SOL hard cap
+const BUDGET_LAMPORTS = Number(arg('--budget-lamports', '10000000')); // default cap 0.01 SOL
 const SEND = process.argv.includes('--send');
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
@@ -21,18 +24,10 @@ const wallet = { seed: Buffer.from(kp.slice(0, 32)), pub: Buffer.from(kp.slice(3
 const mj = generateKeyPairSync('ed25519').privateKey.export({ format: 'jwk' });
 const mint = { seed: Buffer.from(mj.d, 'base64url'), pub: Buffer.from(mj.x, 'base64url') };
 
-const NAME = 'Bounty Pinata';
-const SYMBOL = 'WHACK';
-const LINK = 'https://make.fun/bounty/makefun-coin-promo-01';
-const DESCRIPTION = [
-  'Every bounty is a pinata. Agents swing code at it. Prizes fall out.',
-  '',
-  '$WHACK is the coin for the make.fun coin-promo bounty, launched start to finish by an AI agent: the idea, the robot-star logo, the name and this text.',
-  '',
-  'What is make.fun? A site where people and their AI agents build programs, enter them in paid competitions (bounties) and get scored and ranked in the open. Each bounty locks its USDC reward in an on-chain escrow on Solana, and the best entries win it.',
-  '',
-  'The pinata is the bounty, the bat is your agent, the candy is real USDC. Come swing: ' + LINK,
-].join('\n');
+const coin = JSON.parse(readFileSync(arg('--coin'), 'utf8'));
+const NAME = coin.name, SYMBOL = coin.symbol, LINK = coin.website;
+const DESCRIPTION = coin.description.join('\n');
+if (!DESCRIPTION.includes('make.fun/bounty/makefun-coin-promo-01') || !LINK.startsWith('https://make.fun/')) throw new Error('description or website misses the bounty link');
 
 const rpc = async (method, params) => {
   const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
@@ -45,12 +40,12 @@ const before = (await rpc('getBalance', [b58enc(wallet.pub)])).value;
 console.log('wallet', b58enc(wallet.pub), 'balance lamports', before);
 
 // 1. metadata: a public JSON file in this repository (pump.fun's own uploader sits behind a bot challenge)
-const RAW = 'https://raw.githubusercontent.com/itsjusttu/coin-promo/main/assets/';
-const metadata = { name: NAME, symbol: SYMBOL, description: DESCRIPTION, image: RAW + 'logo.png', showName: true, createdOn: 'https://pump.fun', website: LINK };
-writeFileSync('assets/metadata.json', JSON.stringify(metadata, null, 2) + '\n');
-const meta = { metadataUri: RAW + 'metadata.json' };
+const RAW = 'https://raw.githubusercontent.com/itsjusttu/coin-promo/main/';
+const metadata = { name: NAME, symbol: SYMBOL, description: DESCRIPTION, image: RAW + coin.logo, showName: true, createdOn: 'https://pump.fun', website: LINK };
+writeFileSync(coin.metadata, JSON.stringify(metadata, null, 2) + '\n');
+const meta = { metadataUri: RAW + coin.metadata };
 const served = await fetch(meta.metadataUri);
-if (!served.ok || JSON.stringify(await served.json()) !== JSON.stringify(metadata)) throw new Error('push assets/metadata.json and logo.png to the main branch first');
+if (!served.ok || JSON.stringify(await served.json()) !== JSON.stringify(metadata)) throw new Error('push ' + coin.metadata + ' and ' + coin.logo + ' to the main branch first');
 console.log('metadata uri', meta.metadataUri);
 
 // 2. unsigned create transaction, amount 0 = no initial buy
