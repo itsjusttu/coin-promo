@@ -1,5 +1,6 @@
-// Entry for makefun-coin-promo-01 (Node 22, standard library only, no network):
-// copies LAUNCH.json (the coin's mint and create signature) from the repository root to the output directory.
+// Entry for makefun-coin-promo-01 (Node 22, standard library only, no network).
+// The coin is $WHACK, "Bounty Pinata". This program copies LAUNCH.json (the coin's mint and
+// create signature) from the repository root to the output directory; nothing else is needed.
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
